@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>회원 정보</title>
+    <style>
+        /* 전체적인 스타일 설정 */
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(to right, #0066cc, #66ccff);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            background-color: #f9f9f9;
+            border-radius: 15px;
+            width: 1100px;
+            height: 700px;
+            display: flex;
+            overflow: hidden;
+            box-shadow: 0px 10px 20px rgba(0, 0, 0, 0.2);
+            position: relative;
+        }
+
+        /* 사이드바 스타일 */
+        .sidebar {
+            width: 300px;
+            background-color: #003366;
+            padding: 30px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: center; /* 가운데 정렬 */
+        }
+
+        .sidebar h2 {
+            color: white;
+            margin-bottom: 40px;
+            font-size: 1.8rem;
+            text-align: center; /* 텍스트 가운데 정렬 */
+        }
+
+        .menu-button {
+            width: 100%;
+            padding: 18px;
+            margin-bottom: 15px;
+            background-color: #005bb5;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 1.2rem; /* 글자 크기 1.2rem으로 유지 */
+            cursor: pointer;
+            text-align: center; /* 텍스트 가운데 정렬 */
+            white-space: nowrap;
+        }
+
+        .menu-button:hover {
+            background-color: #004a94;
+        }
+
+        /* 콘텐츠 영역 스타일 */
+        .content {
+            flex-grow: 1;
+            padding: 50px;
+            box-sizing: border-box;
+            overflow-y: auto;
+        }
+
+        .content h3 {
+            color: #003366;
+            margin-bottom: 30px;
+            font-size: 1.8rem;
+        }
+
+        /* 뒤로가기 버튼 스타일 */
+        .back-button {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background-color: transparent;
+            border: none;
+            font-size: 2rem;
+            color: #003366;
+            cursor: pointer;
+        }
+
+        .back-button i {
+            font-size: 2rem;
+        }
+
+        /* 섹션 스타일 */
+        .section {
+            display: none;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        /* '회원 정보 수정' 섹션의 폼 스타일 */
+        #edit-info form {
+            max-width: 700px; /* 너비 700px로 유지 */
+            margin: 0 auto;
+        }
+
+        /* 입력 필드 스타일 */
+        .section form input[type="text"],
+        .section form input[type="password"] {
+            width: 100%;
+            padding: 14px;
+            margin: 12px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 1.1rem;
+            color: #333;
+            box-sizing: border-box;
+        }
+
+        /* 제출 버튼 스타일 */
+        .section form input[type="submit"] {
+            width: 100%;
+            padding: 16px;
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+
+        .section form input[type="submit"]:hover {
+            background-color: #005bb5;
+        }
+
+        /* '회원 탈퇴' 섹션의 제출 버튼 스타일 */
+        #delete-account form input[type="submit"] {
+            background-color: #d32f2f; /* 배경색 변경 */
+        }
+
+        #delete-account form input[type="submit"]:hover {
+            background-color: #b71c1c; /* 호버 시 색상 변경 */
+        }
+
+        /* 신청 내역 테이블 스타일 */
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .history-table th,
+        .history-table td {
+            border: 1px solid #ccc;
+            padding: 12px;
+            text-align: center;
+            font-size: 1rem;
+        }
+
+        .history-table th {
+            background-color: #f0f0f0;
+        }
+
+        /* 신청서 다운로드 버튼 */
+        .download-button {
+            width: 100%;
+            padding: 16px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+
+        .download-button:hover {
+            background-color: #218838;
+        }
+
+        /* 신청서 양식 다운로드 섹션 스타일 */
+        .form-download-section p {
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+        }
+    </style>
+    <!-- 아이콘 사용을 위한 Font Awesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <!-- 사이드바 -->
+        <div class="sidebar">
+            <h2>회원 정보</h2>
+            <button class="menu-button" onclick="showSection('edit-info')">회원 정보 수정</button>
+            <button class="menu-button" onclick="showSection('delete-account')">회원 탈퇴</button>
+            <button class="menu-button" onclick="showSection('application-history')">신청 내역</button>
+            <button class="menu-button" onclick="showSection('form-download')">신청서 양식 다운로드</button>
+        </div>
+
+        <!-- 콘텐츠 영역 -->
+        <div class="content">
+            <!-- 회원 정보 수정 섹션 -->
+            <div id="edit-info" class="section">
+                <h3>회원 정보 수정</h3>
+                <form action="#" method="post">
+                    <input type="text" name="name" placeholder="이름 수정">
+                    <input type="password" name="password" placeholder="새 비밀번호">
+                    <input type="password" name="confirm_password" placeholder="비밀번호 확인">
+                    <input type="submit" value="정보 수정">
+                </form>
+            </div>
+
+            <!-- 회원 탈퇴 섹션 -->
+            <div id="delete-account" class="section">
+                <h3>회원 탈퇴</h3>
+                <p>계정을 삭제하시겠습니까?</p>
+                <form action="#" method="post">
+                    <input type="password" name="password" placeholder="비밀번호 확인" required>
+                    <input type="submit" value="회원 탈퇴">
+                </form>
+            </div>
+
+            <!-- 신청 내역 섹션 -->
+            <div id="application-history" class="section">
+                <h3>신청 내역</h3>
+                <!-- 신청 내역 테이블 (예시 데이터) -->
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>강의실</th>
+                            <th>상태</th>
+                            <th>날짜</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>101호</td>
+                            <td>대여 대기</td>
+                            <td>2023-10-01</td>
+                        </tr>
+                        <tr>
+                            <td>202호</td>
+                            <td>대여 완료</td>
+                            <td>2023-09-15</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 신청서 양식 다운로드 섹션 -->
+            <div id="form-download" class="section form-download-section">
+                <h3>신청서 양식 다운로드</h3>
+                <p>신청서 양식을 다운로드하려면 아래 버튼을 클릭하세요.</p>
+                <!-- 신청서 다운로드 버튼 -->
+                <button class="download-button">신청서 양식 다운로드</button>
+            </div>
+        </div>
+
+        <!-- 뒤로가기 버튼 -->
+        <button class="back-button" onclick="window.location.href='/user_main'">
+            <i class="fas fa-arrow-left"></i>
+        </button>
+    </div>
+
+    <script>
+        // 섹션 표시 함수
+        function showSection(sectionId) {
+            // 모든 섹션 숨기기
+            var sections = document.getElementsByClassName('section');
+            for (var i = 0; i < sections.length; i++) {
+                sections[i].classList.remove('active');
+            }
+            // 선택한 섹션 보이기
+            document.getElementById(sectionId).classList.add('active');
+        }
+
+        // 페이지 로드 시 기본 섹션 표시
+        window.onload = function() {
+            showSection('edit-info'); // 기본으로 표시할 섹션 ID
+        };
+    </script>
+</body>
+</html>

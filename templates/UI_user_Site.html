@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>남서울대학교 강의실 대여 시스템 - 일반 사용자</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(to right, #0066cc, #66ccff);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            width: 80%;
+            max-width: 1200px;
+            margin: auto;
+            text-align: center;
+            background-color: #f9f9f9;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0px 10px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .header {
+            background-color: #003366;
+            color: white;
+            padding: 20px;
+            border-top-left-radius: 15px;
+            border-top-right-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .title {
+            font-size: 1.5rem;
+            text-align: left;
+        }
+
+        .admin-info {
+            font-size: 1rem;
+            text-align: right;
+        }
+
+        .main-content {
+            padding: 20px;
+        }
+
+        .room-diagram {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .room {
+            width: 100px;
+            height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .room:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .available {
+            background-color: #e0f7fa;
+            color: #00796b;
+        }
+
+        .unavailable {
+            background-color: #ffcdd2;
+            color: #d32f2f;
+        }
+
+        .pending {
+            background-color: #fff9c4;
+            color: #fbc02d;
+        }
+
+        /* 모달 스타일 */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            width: 350px;
+            text-align: center;
+        }
+
+        .modal-header {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: #003366;
+        }
+
+        .close {
+            float: right;
+            font-size: 1.2rem;
+            color: #003366;
+            cursor: pointer;
+        }
+
+        .modal-footer {
+            margin-top: 20px;
+        }
+
+        .modal-content input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 1rem;
+            color: #333;
+            box-sizing: border-box;
+        }
+
+        .modal-content input[type="text"]::placeholder {
+            color: #888;
+        }
+
+        .modal-content button {
+            width: 100%;
+            padding: 10px;
+            background-color: #003366;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+
+        .modal-content button:hover {
+            background-color: #005bb5;
+        }
+
+        .main-content {
+            padding: 20px;
+            margin-bottom: 40px; /* 층 간 간격 추가 */
+        }
+
+        .logout-link {
+            color: white;
+            cursor: pointer;
+            /* 밑줄 제거 */
+        }
+
+    </style>
+    <script>
+        var userId = "{{ user_id }}";
+
+        function logout() {
+            // 로그인 페이지로 이동
+            window.location.href = '/logout';
+        } 
+        
+        function handleRoomClick(roomElement) {
+            if (roomElement.classList.contains('available')) {
+                document.getElementById('modal').style.display = 'flex';
+                document.getElementById('room-number').value = roomElement.textContent;
+            } else if (roomElement.classList.contains('unavailable')) {
+                alert("이 강의실은 대여가 불가능합니다.");
+            } else if (roomElement.classList.contains('pending')) {
+                alert("이 강의실은 대여 대기 중입니다.");
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('modal').style.display = 'none';
+        }
+
+        function submitApplication() {
+            const name = document.getElementById('name').value;
+            const studentId = document.getElementById('studentId').value;
+            const phone = document.getElementById('phone').value;
+            const roomNumber = document.getElementById('room-number').value;
+
+            fetch('/verify_user_info', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    'name': name,
+                    'student_id': studentId,
+                    'phone': phone,
+                }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.is_valid) {
+                    if (confirm("강의실 " + roomNumber + "호 대여가 맞습니까?")) {
+                        alert("대여 대기 상태로 변경되었습니다.");
+                        const roomElement = Array.from(document.getElementsByClassName('room')).find(el => el.textContent.trim() === roomNumber);
+                        roomElement.classList.remove('available');
+                        roomElement.classList.add('pending');
+
+                        fetch('/submit_reservation', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: new URLSearchParams({
+                                'room_number': roomNumber,
+                                'user_id': userId, // 로그인 아이디를 사용
+                                'status': '대여 대기',
+                            }),
+                        })
+                        .then(response => response.json())
+                        .then(reservationData => {
+                            if (reservationData.success) {
+                                closeModal();
+                            } else {
+                                alert("예약 저장에 실패했습니다. 다시 시도해주세요.");
+                            }
+                        });
+                    }
+                } else {
+                    alert("회원정보와 일치하지 않습니다. 다시 시도해주세요.");
+                }
+            });
+        }
+
+        setInterval(fetchReservations, 100);
+
+        function fetchReservations() {
+            fetch('/get_reservations')
+            .then(response => response.json())
+            .then(data => {
+                const allRoomElements = document.querySelectorAll('.room');
+                allRoomElements.forEach(roomElement => {
+                    roomElement.classList.remove('available', 'pending', 'unavailable');
+                    roomElement.classList.add('available');
+                });
+
+                data.forEach(reservation => {
+                    const roomElement = document.querySelector(`[data-room-number='${reservation.room_number}']`);
+                    if (roomElement) {
+                        roomElement.classList.remove('available', 'pending', 'unavailable');
+                        if (reservation.status === "대여 대기") {
+                            roomElement.classList.add('pending');
+                        } else if (reservation.status === "대여 완료") {
+                            roomElement.classList.add('unavailable');
+                        }
+                    }
+                });
+            })
+            .catch(error => console.error('Error fetching reservations:', error));
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="title" style="font-weight: bold; font-size: 1.5em;">남서울대학교 강의실 대여 시스템</div>
+            <div class="admin-info">
+                <a href="{{ url_for('user_info') }}">회원정보</a> | <span class="logout-link" onclick="logout()">로그아웃</span></span>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <h2>1층 강의실</h2>
+            <div class="room-diagram">
+                <div class="room available" data-room-number="101" onclick="handleRoomClick(this)">101</div>
+                <div class="room available" data-room-number="102" onclick="handleRoomClick(this)">102</div>
+                <div class="room available" data-room-number="103" onclick="handleRoomClick(this)">103</div>
+                <div class="room available" data-room-number="104" onclick="handleRoomClick(this)">104</div>
+                <div class="room available" data-room-number="105" onclick="handleRoomClick(this)">105</div>
+                <div class="room available" data-room-number="106" onclick="handleRoomClick(this)">106</div>
+                <div class="room available" data-room-number="107" onclick="handleRoomClick(this)">107</div>
+                <div class="room available" data-room-number="108" onclick="handleRoomClick(this)">108</div>
+                <div class="room available" data-room-number="109" onclick="handleRoomClick(this)">109</div>
+                <div class="room available" data-room-number="110" onclick="handleRoomClick(this)">110</div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <h2>2층 강의실</h2>
+            <div class="room-diagram">
+                <div class="room available" data-room-number="201" onclick="handleRoomClick(this)">201</div>
+                <div class="room available" data-room-number="202" onclick="handleRoomClick(this)">202</div>
+                <div class="room available" data-room-number="203" onclick="handleRoomClick(this)">203</div>
+                <div class="room available" data-room-number="204" onclick="handleRoomClick(this)">204</div>
+                <div class="room available" data-room-number="205" onclick="handleRoomClick(this)">205</div>
+                <div class="room available" data-room-number="206" onclick="handleRoomClick(this)">206</div>
+                <div class="room available" data-room-number="207" onclick="handleRoomClick(this)">207</div>
+                <div class="room available" data-room-number="208" onclick="handleRoomClick(this)">208</div>
+                <div class="room available" data-room-number="209" onclick="handleRoomClick(this)">209</div>
+                <div class="room available" data-room-number="210" onclick="handleRoomClick(this)">210</div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <h2>3층 강의실</h2>
+            <div class="room-diagram">
+                <div class="room available" data-room-number="301" onclick="handleRoomClick(this)">301</div>
+                <div class="room available" data-room-number="302" onclick="handleRoomClick(this)">302</div>
+                <div class="room available" data-room-number="303" onclick="handleRoomClick(this)">303</div>
+                <div class="room available" data-room-number="304" onclick="handleRoomClick(this)">304</div>
+                <div class="room available" data-room-number="305" onclick="handleRoomClick(this)">305</div>
+                <div class="room available" data-room-number="306" onclick="handleRoomClick(this)">306</div>
+                <div class="room available" data-room-number="307" onclick="handleRoomClick(this)">307</div>
+                <div class="room available" data-room-number="308" onclick="handleRoomClick(this)">308</div>
+                <div class="room available" data-room-number="309" onclick="handleRoomClick(this)">309</div>
+                <div class="room available" data-room-number="310" onclick="handleRoomClick(this)">310</div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 모달 -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <div class="modal-header">강의실 신청</div>
+            <input type="hidden" id="room-number">
+            <input type="text" id="name" placeholder="이름" required><br><br>
+            <input type="text" id="studentId" placeholder="학번 (8자리)" minlength="8" maxlength="8" required><br><br>
+            <input type="text" id="phone" placeholder="전화번호" pattern="\d{10,11}" maxlength="11" required><br><br>
+            <div class="modal-footer">
+                <button onclick="submitApplication()">신청</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
