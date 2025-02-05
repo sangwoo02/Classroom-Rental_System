@@ -1,5 +1,5 @@
 import sqlite3
-from flask import Flask, render_template, request, redirect, url_for, jsonify, session
+from flask import Flask, render_template, request, redirect, url_for, jsonify, session, send_file
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
@@ -351,6 +351,21 @@ def user_info():
     user_id = session['user_id']
     return render_template('user_info.html', user_id=user_id)
     
+
+@app.route('/download_application_form')
+def download_application_form():
+    # 로그인 여부 확인 (예시)
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    # hwp 파일 경로 설정
+    file_path = 'application_form.hwp'
+
+    # 파일 전송
+    return send_file(file_path, as_attachment=True)
+
+
+
 if __name__ == '__main__':
     init_db()   # 데이터베이스 초기화
     init_admin() # 관리자 계정 생성

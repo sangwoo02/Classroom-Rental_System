@@ -4,8 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>남서울대학교 강의실 대여 시스템 - 일반 사용자</title>
+    <!-- Font Awesome CDN -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
+        /* 기본 스타일 설정 */
         body {
             font-family: Arial, sans-serif;
             background: linear-gradient(to right, #0066cc, #66ccff);
@@ -51,6 +53,34 @@
 
         .main-content {
             padding: 20px;
+            margin-bottom: 40px;
+        }
+
+        /* 층 헤더 스타일 */
+        .floor-header {
+            position: relative;
+            text-align: center; /* 층 제목을 가운데 정렬 */
+        }
+
+        .floor-header h2 {
+            margin: 0;
+        }
+
+        .floor-plan-button {
+            position: absolute;
+            top: 0;
+            right: 0; /* 버튼을 오른쪽 상단에 위치 */
+            font-size: 1rem; /* 층 제목보다 작은 글자 크기 */
+            color: black;
+            background-color: transparent;
+            border: none;
+            cursor: pointer;
+            padding: 0;
+            text-decoration: underline;
+        }
+
+        .floor-plan-button:hover {
+            text-decoration: none;
         }
 
         .room-diagram {
@@ -94,11 +124,11 @@
             color: #fbc02d;
         }
 
-        /* 모달 스타일 */
+        /* 공통 모달 스타일 */
         .modal {
             display: none;
             position: fixed;
-            z-index: 1;
+            z-index: 9999;
             left: 0;
             top: 0;
             width: 100%;
@@ -108,33 +138,36 @@
             justify-content: center;
         }
 
-        .modal-content {
+        /* 강의실 신청 모달 스타일 */
+        .application-modal .modal-content {
             background-color: white;
             padding: 30px;
             border-radius: 10px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
             width: 350px;
             text-align: center;
+            position: relative;
         }
 
-        .modal-header {
+        .application-modal .modal-header {
             font-size: 1.5rem;
             margin-bottom: 20px;
             color: #003366;
         }
 
-        .close {
-            float: right;
-            font-size: 1.2rem;
+        .application-modal .close {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            font-size: 1.5rem;
             color: #003366;
             cursor: pointer;
         }
 
-        .modal-footer {
+        .application-modal .modal-footer {
             margin-top: 20px;
         }
 
-        .modal-content input[type="text"] {
+        .application-modal .modal-content input[type="text"] {
             width: 100%;
             padding: 10px;
             margin: 8px 0;
@@ -145,11 +178,11 @@
             box-sizing: border-box;
         }
 
-        .modal-content input[type="text"]::placeholder {
+        .application-modal .modal-content input[type="text"]::placeholder {
             color: #888;
         }
 
-        .modal-content button {
+        .application-modal .modal-content button {
             width: 100%;
             padding: 10px;
             background-color: #003366;
@@ -160,19 +193,42 @@
             cursor: pointer;
         }
 
-        .modal-content button:hover {
+        .application-modal .modal-content button:hover {
             background-color: #005bb5;
         }
 
-        .main-content {
+        /* 도면 보기 모달 스타일 */
+        .floor-plan-modal .modal-content {
+            background-color: white;
             padding: 20px;
-            margin-bottom: 40px; /* 층 간 간격 추가 */
+            border-radius: 10px;
+            width: 95%;
+            max-width: 1000px;
+            max-height: 95vh; /* 최대 높이로 설정 */
+            overflow: auto;
+            text-align: center;
+            position: relative;
+        }
+
+        .floor-plan-modal .close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 2rem;
+            cursor: pointer;
+        }
+
+        .floor-plan-modal #floor-plan-image {
+            width: auto;
+            max-width: 100%;
+            height: auto;
+            max-height: 90vh; /* 최대 높이로 설정하여 이미지가 화면을 넘지 않도록 함 */
         }
 
         .logout-link {
             color: white;
             cursor: pointer;
-            /* 밑줄 제거 */
+            text-decoration: none;
         }
 
     </style>
@@ -182,12 +238,13 @@
         function logout() {
             // 로그인 페이지로 이동
             window.location.href = '/logout';
-        } 
-        
-        function handleRoomClick(roomElement) {
+        }
+
+        // 강의실 신청 모달 열기 함수
+        function openApplicationModal(roomElement) {
             if (roomElement.classList.contains('available')) {
-                document.getElementById('modal').style.display = 'flex';
-                document.getElementById('room-number').value = roomElement.textContent;
+                document.getElementById('application-modal').style.display = 'flex';
+                document.getElementById('room-number').value = roomElement.textContent.trim();
             } else if (roomElement.classList.contains('unavailable')) {
                 alert("이 강의실은 대여가 불가능합니다.");
             } else if (roomElement.classList.contains('pending')) {
@@ -195,8 +252,30 @@
             }
         }
 
-        function closeModal() {
-            document.getElementById('modal').style.display = 'none';
+        // 강의실 신청 모달 닫기 함수
+        function closeApplicationModal() {
+            document.getElementById('application-modal').style.display = 'none';
+        }
+
+        // 기존의 handleRoomClick 함수를 수정하여 openApplicationModal을 호출
+        function handleRoomClick(roomElement) {
+            openApplicationModal(roomElement);
+        }
+
+        // 도면 보기 모달 열기 함수
+        function openFloorPlan(floorNumber) {
+            var modal = document.getElementById('floor-plan-modal');
+            var img = document.getElementById('floor-plan-image');
+            
+            var imagePath = '/static/images/floor' + floorNumber + '.png';
+
+            img.src = imagePath;
+            modal.style.display = 'flex';
+        }
+
+        // 도면 보기 모달 닫기 함수
+        function closeFloorPlanModal() {
+            document.getElementById('floor-plan-modal').style.display = 'none';
         }
 
         function submitApplication() {
@@ -239,7 +318,7 @@
                         .then(response => response.json())
                         .then(reservationData => {
                             if (reservationData.success) {
-                                closeModal();
+                                closeApplicationModal();
                             } else {
                                 alert("예약 저장에 실패했습니다. 다시 시도해주세요.");
                             }
@@ -277,20 +356,27 @@
             })
             .catch(error => console.error('Error fetching reservations:', error));
         }
+
     </script>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <div class="title" style="font-weight: bold; font-size: 1.5em;">남서울대학교 강의실 대여 시스템</div>
+            <div class="title">남서울대학교 강의실 대여 시스템</div>
             <div class="admin-info">
-                <a href="{{ url_for('user_info') }}">회원정보</a> | <span class="logout-link" onclick="logout()">로그아웃</span></span>
+                <a href="{{ url_for('user_info') }}" style="color: white; text-decoration: none;">회원정보</a> | <span class="logout-link" onclick="logout()">로그아웃</span>
             </div>
         </div>
-
+        <div style="margin-bottom: 50px;"> <!-- 공백 시스템 -->
+            
+        </div>
         <div class="main-content">
-            <h2>1층 강의실</h2>
+            <div class="floor-header">
+                <h2>1층 강의실</h2>
+                <button class="floor-plan-button" onclick="openFloorPlan(1)">도면 보기</button>
+            </div>
             <div class="room-diagram">
+                <!-- 1층 강의실 목록 -->
                 <div class="room available" data-room-number="101" onclick="handleRoomClick(this)">101</div>
                 <div class="room available" data-room-number="102" onclick="handleRoomClick(this)">102</div>
                 <div class="room available" data-room-number="103" onclick="handleRoomClick(this)">103</div>
@@ -305,8 +391,12 @@
         </div>
 
         <div class="main-content">
-            <h2>2층 강의실</h2>
+            <div class="floor-header">
+                <h2>2층 강의실</h2>
+                <button class="floor-plan-button" onclick="openFloorPlan(2)">도면 보기</button>
+            </div>
             <div class="room-diagram">
+                <!-- 2층 강의실 목록 -->
                 <div class="room available" data-room-number="201" onclick="handleRoomClick(this)">201</div>
                 <div class="room available" data-room-number="202" onclick="handleRoomClick(this)">202</div>
                 <div class="room available" data-room-number="203" onclick="handleRoomClick(this)">203</div>
@@ -321,8 +411,12 @@
         </div>
 
         <div class="main-content">
-            <h2>3층 강의실</h2>
+            <div class="floor-header">
+                <h2>3층 강의실</h2>
+                <button class="floor-plan-button" onclick="openFloorPlan(3)">도면 보기</button>
+            </div>
             <div class="room-diagram">
+                <!-- 3층 강의실 목록 -->
                 <div class="room available" data-room-number="301" onclick="handleRoomClick(this)">301</div>
                 <div class="room available" data-room-number="302" onclick="handleRoomClick(this)">302</div>
                 <div class="room available" data-room-number="303" onclick="handleRoomClick(this)">303</div>
@@ -335,13 +429,13 @@
                 <div class="room available" data-room-number="310" onclick="handleRoomClick(this)">310</div>
             </div>
         </div>
-
     </div>
 
-    <!-- 모달 -->
-    <div id="modal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="closeModal()">&times;</span>
+    
+    <!-- 강의실 신청 모달 -->
+    <div id="application-modal" class="modal application-modal">
+        <div class="modal-content application-modal-content">
+            <span class="close" onclick="closeApplicationModal()">&times;</span>
             <div class="modal-header">강의실 신청</div>
             <input type="hidden" id="room-number">
             <input type="text" id="name" placeholder="이름" required><br><br>
@@ -352,5 +446,12 @@
             </div>
         </div>
     </div>
-</body>
-</html>
+
+    <!-- 도면 보기 모달 -->
+    <div id="floor-plan-modal" class="modal floor-plan-modal">
+        <div class="modal-content floor-plan-modal-content">
+            <span class="close" onclick="closeFloorPlanModal()">&times;</span>
+            <div class="modal-header">도면 보기</div>
+            <img id="floor-plan-image" src="" alt="도면 이미지">
+        </div>
+    </div>
