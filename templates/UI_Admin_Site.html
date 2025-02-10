@@ -174,73 +174,95 @@
             cursor: pointer;
         }
 
+
+        /* 날짜 선택 모달 스타일 */
+        #date-modal .modal-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            width: 300px;
+            text-align: center;
+            position: relative;
+        }
+
+        #date-modal .close {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        #selected-date {
+            width: 100%;
+            padding: 10px;
+            font-size: 1rem;
+            margin-top: 20px;
+        }
+
+        #date-modal .modal-footer {
+            margin-top: 20px;
+        }
+
     </style>
     <script>
-
         function logout() {
             // 로그인 페이지로 이동
             window.location.href = '/logout';
         }
 
         let currentReservations = {};  // 현재 예약 상태를 저장하는 객체
+        let currentRoomNumber = null;  // 현재 선택된 강의실 번호
+        
+        // 현재 선택된 날짜를 저장할 변수
+        let today = new Date();
+        let year = today.getFullYear();
+        let month = String(today.getMonth() + 1).padStart(2, '0'); // 월은 0부터 시작하므로 +1
+        let day = String(today.getDate()).padStart(2, '0');
 
-        setInterval(fetchReservations, 100);
+        let currentDate = `${year}-${month}-${day}`; // YYYY-MM-DD 형식
+
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // 페이지 로드 시 현재 날짜의 예약 정보를 가져옵니다.
+            fetchReservations();
+        });
+
+        // 예약 정보 주기적으로 갱신 (예: 30초마다)
+        setInterval(fetchReservations, 1000);
 
         function fetchReservations() {
-            fetch('/get_reservations')
+            fetch(`/get_reservations?date=${currentDate}`)
                 .then(response => response.json())
                 .then(data => {
-                    // 새로운 예약 상태를 임시로 저장할 객체
-                    let newReservations = {};
-
-                    data.forEach(reservation => {
-                        const roomNumber = reservation.room_number;
-                        const status = reservation.status;
-                        newReservations[roomNumber] = status;
-
-                        // 상태가 변경된 경우에만 DOM 업데이트
-                        if (currentReservations[roomNumber] !== status) {
-                            updateRoomStatus(roomNumber, status);
-                        }
+                    // 모든 강의실 상태를 초기화
+                    const allRoomElements = document.querySelectorAll('.room');
+                    allRoomElements.forEach(roomElement => {
+                        roomElement.classList.remove('available', 'pending', 'unavailable');
+                        roomElement.classList.add('available');
                     });
 
-                    // 삭제된 예약에 대한 처리
-                    for (let roomNumber in currentReservations) {
-                        if (!(roomNumber in newReservations)) {
-                            updateRoomStatus(roomNumber, 'available');
+                    // 예약 상태 업데이트
+                    data.forEach(reservation => {
+                        const roomElement = document.querySelector(`[data-room-number='${reservation.room_number}']`);
+                        if (roomElement) {
+                            roomElement.classList.remove('available', 'pending', 'unavailable');
+                            if (reservation.status === "대여 대기") {
+                                roomElement.classList.add('pending');
+                            } else if (reservation.status === "대여 완료") {
+                                roomElement.classList.add('unavailable');
+                            }
                         }
-                    }
-
-                    // 현재 예약 상태를 업데이트
-                    currentReservations = newReservations;
+                    });
                 })
                 .catch(error => console.error('Error fetching reservations:', error));
         }
 
-        function updateRoomStatus(roomNumber, status) {
-            const roomElement = document.querySelector(`[data-room-number='${roomNumber}']`);
-            if (roomElement) {
-                // 모든 상태 클래스를 제거하고 새로운 상태만 추가
-                roomElement.classList.remove('available', 'pending', 'unavailable');
-                if (status === "대여 대기") {
-                    roomElement.classList.add('pending');
-                } else if (status === "대여 완료") {
-                    roomElement.classList.add('unavailable');
-                } else {
-                    roomElement.classList.add('available');
-                }
-            }
-        }
-
-
-
-
         function handleRoomClick(roomElement) {
             const roomNumber = roomElement.getAttribute('data-room-number');
             const closeButton = document.querySelector('.modal .close'); // 닫기 버튼 선택자
-            if (roomElement.classList.contains('pending')) {
-                // 대여 대기 상태: 승인/불허 모달 표시
-                fetch(`/get_reservation_info?room_number=${roomNumber}`)
+            if (roomElement.classList.contains('pending') || roomElement.classList.contains('unavailable')) {
+                fetch(`/get_reservation_info?room_number=${roomNumber}&date=${currentDate}`)
                     .then(response => response.json())
                     .then(data => {
                         if (data.success) {
@@ -251,42 +273,25 @@
                             document.getElementById('student-id').textContent = data.student_id;
                             document.getElementById('user-phone').textContent = data.phone;
 
-                            // 승인/불허 버튼 표시
-                            document.getElementById('modal-message').textContent = '해당 강의실 신청을 승인하시겠습니까?';
-                            document.getElementById('approve-button').style.display = 'inline-block';
-                            document.getElementById('deny-button').style.display = 'inline-block';
-                            document.getElementById('cancel-rental-button').style.display = 'none';
-                            document.getElementById('close-button').style.display = 'none';
-
-                            // 닫기 버튼 표시
-                            closeButton.style.display = 'block';
-                        } else {
-                            alert("해당 강의실에 대한 예약 정보를 불러올 수 없습니다.");
-                        }
-                    })
-                    .catch(error => console.error('Error fetching reservation info:', error));
-            } else if (roomElement.classList.contains('unavailable')) {
-                // 대여 완료 상태: 대여 취소 모달 표시
-                fetch(`/get_reservation_info?room_number=${roomNumber}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            currentRoomNumber = roomNumber;
-                            document.getElementById('modal').style.display = 'block';
-                            document.getElementById('room-number').textContent = roomNumber;
-                            document.getElementById('user-name').textContent = data.name;
-                            document.getElementById('student-id').textContent = data.student_id;
-                            document.getElementById('user-phone').textContent = data.phone;
-
-                            // 대여 취소 버튼 표시
-                            document.getElementById('modal-message').textContent = '해당 강의실 대여를 취소하시겠습니까?';
-                            document.getElementById('approve-button').style.display = 'none';
-                            document.getElementById('deny-button').style.display = 'none';
-                            document.getElementById('cancel-rental-button').style.display = 'inline-block';
-                            document.getElementById('close-button').style.display = 'inline-block';
-
-                            // 닫기 버튼 숨기기
-                            closeButton.style.display = 'none';
+                            if (roomElement.classList.contains('pending')) {
+                                // 승인/불허 버튼 표시
+                                document.getElementById('modal-message').textContent = '해당 강의실 신청을 승인하시겠습니까?';
+                                document.getElementById('approve-button').style.display = 'inline-block';
+                                document.getElementById('deny-button').style.display = 'inline-block';
+                                document.getElementById('cancel-rental-button').style.display = 'none';
+                                document.getElementById('close-button').style.display = 'none';
+                                // 닫기 버튼 표시
+                                closeButton.style.display = 'block';
+                            } else if (roomElement.classList.contains('unavailable')) {
+                                // 대여 취소 버튼 표시
+                                document.getElementById('modal-message').textContent = '해당 강의실 대여를 취소하시겠습니까?';
+                                document.getElementById('approve-button').style.display = 'none';
+                                document.getElementById('deny-button').style.display = 'none';
+                                document.getElementById('cancel-rental-button').style.display = 'inline-block';
+                                document.getElementById('close-button').style.display = 'inline-block';
+                                // 닫기 버튼 숨기기
+                                closeButton.style.display = 'none';
+                            }
                         } else {
                             alert("해당 강의실에 대한 예약 정보를 불러올 수 없습니다.");
                         }
@@ -294,9 +299,6 @@
                     .catch(error => console.error('Error fetching reservation info:', error));
             }
         }
-
-
-
 
         function closeModal() {
             document.getElementById('modal').style.display = 'none';
@@ -312,25 +314,25 @@
                     body: new URLSearchParams({
                         'room_number': currentRoomNumber,
                         'status': '대여 완료',
+                        'date': currentDate  // 날짜 추가
                     }),
                 })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            alert("승인되었습니다.");
-                            closeModal();
-                            fetchReservations(); // 상태 갱신
-                        } else {
-                            alert("승인 처리에 실패했습니다.");
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error approving reservation:', error);
-                        alert("승인 처리 중 오류가 발생했습니다.");
-                    });
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert("승인되었습니다.");
+                        closeModal();
+                        fetchReservations(); // 상태 갱신
+                    } else {
+                        alert("승인 처리에 실패했습니다.");
+                    }
+                })
+                .catch(error => {
+                    console.error('Error approving reservation:', error);
+                    alert("승인 처리 중 오류가 발생했습니다.");
+                });
             }
         }
-
 
         function denyReservation() {
             if (currentRoomNumber) {
@@ -341,6 +343,7 @@
                     },
                     body: new URLSearchParams({
                         'room_number': currentRoomNumber,
+                        'date': currentDate  // 날짜 추가
                     }),
                 })
                 .then(response => response.json())
@@ -352,12 +355,15 @@
                     } else {
                         alert("불허 처리에 실패했습니다.");
                     }
+                })
+                .catch(error => {
+                    console.error('Error denying reservation:', error);
+                    alert("불허 처리 중 오류가 발생했습니다.");
                 });
             }
         }
 
         function cancelRental() {
-            console.log('cancelRental() called with currentRoomNumber:', currentRoomNumber);
             if (currentRoomNumber) {
                 fetch('/cancel_rental', {
                     method: 'POST',
@@ -366,40 +372,67 @@
                     },
                     body: new URLSearchParams({
                         'room_number': currentRoomNumber,
+                        'date': currentDate  // 날짜 추가
                     }),
                 })
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error('Network response was not ok');
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        console.log('Data received from server:', data);
-                        if (data.success) {
-                            alert("대여가 취소되었습니다.");
-                            closeModal();
-                            fetchReservations(); // 상태 갱신
-                        } else {
-                            alert("대여 취소에 실패했습니다.");
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error in cancelRental:', error);
-                        alert("대여 취소 중 오류가 발생했습니다.");
-                    });
-            } else {
-                console.error('currentRoomNumber is not set.');
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert("대여가 취소되었습니다.");
+                        closeModal();
+                        fetchReservations(); // 상태 갱신
+                    } else {
+                        alert("대여 취소에 실패했습니다.");
+                    }
+                })
+                .catch(error => {
+                    console.error('Error canceling rental:', error);
+                    alert("대여 취소 중 오류가 발생했습니다.");
+                });
             }
         }
 
+        function openDateModal() {
+            document.getElementById('date-modal').style.display = 'block';
+            document.getElementById('selected-date').value = currentDate;
+        }
 
+        function closeDateModal() {
+            document.getElementById('date-modal').style.display = 'none';
+        }
+
+        function selectDate() {
+            currentDate = document.getElementById('selected-date').value;
+            closeDateModal();
+            fetchReservations();
+        }
+
+        // 모달 바깥 영역 클릭 시 닫기
+        window.onclick = function(event) {
+            var modal = document.getElementById('modal');
+            var dateModal = document.getElementById('date-modal');
+            if (event.target == modal) {
+                closeModal();
+            }
+            if (event.target == dateModal) {
+                closeDateModal();
+            }
+        }
+
+        // Esc 키로 모달 닫기
+        document.addEventListener('keydown', function(event) {
+            if (event.key === "Escape") {
+                closeModal();
+                closeDateModal();
+            }
+        });
     </script>
 </head>
 <body>
     <header class="header">
         <h1>남서울대학교 관리자 대여 시스템 <span class="admin-mode">(관리자 모드)</span></h1>
         <div class="admin-info">
+            <button id="date-select-button" onclick="openDateModal()">날짜 선택</button> |
             <span>회원기록검색 | <span class="logout-link" onclick="logout()">로그아웃</span></span>
         </div>
     </header>
@@ -449,6 +482,17 @@
             <div class="room available" data-room-number="308" onclick="handleRoomClick(this)">308</div>
             <div class="room available" data-room-number="309" onclick="handleRoomClick(this)">309</div>
             <div class="room available" data-room-number="310" onclick="handleRoomClick(this)">310</div>
+        </div>
+    </div>
+    <!-- 날짜 선택 모달 -->
+    <div id="date-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeDateModal()">&times;</span>
+            <h2 class="modal-header">날짜 선택</h2>
+            <input type="date" id="selected-date" value="" />
+            <div class="modal-footer">
+                <button onclick="selectDate()">확인</button>
+            </div>
         </div>
     </div>
 

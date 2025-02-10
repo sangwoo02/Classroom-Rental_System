@@ -231,9 +231,72 @@
             text-decoration: none;
         }
 
+        /* 날짜 선택 모달 스타일 */
+        #date-modal .modal-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            width: 300px;
+            text-align: center;
+            position: relative;
+        }
+
+        #date-modal .close {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        #selected-date {
+            width: 100%;
+            padding: 10px;
+            font-size: 1rem;
+            margin-top: 20px;
+        }
+
+        #date-modal .modal-footer {
+            margin-top: 20px;
+        }
+        
+
     </style>
     <script>
         var userId = "{{ user_id }}";
+
+        // 현재 선택된 날짜를 저장할 변수
+        let today = new Date();
+        let year = today.getFullYear();
+        let month = String(today.getMonth() + 1).padStart(2, '0');
+        let day = String(today.getDate()).padStart(2, '0');
+
+        let selectedDate = `${year}-${month}-${day}`; // YYYY-MM-DD 형식
+
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // 페이지 로드 시 현재 날짜의 예약 정보를 가져옵니다.
+            fetchReservations();
+
+            // 예약 정보를 주기적으로 갱신
+            setInterval(fetchReservations, 1000); // 0.5초마다 갱신
+        }); 
+
+        // 날짜 선택 모달 열기
+        function openDateModal() {
+            document.getElementById('date-modal').style.display = 'block';
+            document.getElementById('selected-date').value = selectedDate;
+        }
+
+        function closeDateModal() {
+            document.getElementById('date-modal').style.display = 'none';
+        }
+
+        function selectDate() {
+            selectedDate = document.getElementById('selected-date').value;
+            closeDateModal();
+            fetchReservations();
+        }
 
         function logout() {
             // 로그인 페이지로 이동
@@ -245,6 +308,8 @@
             if (roomElement.classList.contains('available')) {
                 document.getElementById('application-modal').style.display = 'flex';
                 document.getElementById('room-number').value = roomElement.textContent.trim();
+                // 날짜 입력 필드를 선택된 날짜로 설정
+                document.getElementById('reservation-date').value = selectedDate;
             } else if (roomElement.classList.contains('unavailable')) {
                 alert("이 강의실은 대여가 불가능합니다.");
             } else if (roomElement.classList.contains('pending')) {
@@ -257,7 +322,7 @@
             document.getElementById('application-modal').style.display = 'none';
         }
 
-        // 기존의 handleRoomClick 함수를 수정하여 openApplicationModal을 호출
+        // 강의실 클릭 처리 함수
         function handleRoomClick(roomElement) {
             openApplicationModal(roomElement);
         }
@@ -278,11 +343,13 @@
             document.getElementById('floor-plan-modal').style.display = 'none';
         }
 
+        // 예약 신청 함수 수정
         function submitApplication() {
             const name = document.getElementById('name').value;
             const studentId = document.getElementById('studentId').value;
             const phone = document.getElementById('phone').value;
             const roomNumber = document.getElementById('room-number').value;
+            const date = document.getElementById('reservation-date').value; // 날짜 입력 필드에서 가져옴
 
             fetch('/verify_user_info', {
                 method: 'POST',
@@ -298,12 +365,8 @@
             .then(response => response.json())
             .then(data => {
                 if (data.is_valid) {
-                    if (confirm("강의실 " + roomNumber + "호 대여가 맞습니까?")) {
-                        alert("대여 대기 상태로 변경되었습니다.");
-                        const roomElement = Array.from(document.getElementsByClassName('room')).find(el => el.textContent.trim() === roomNumber);
-                        roomElement.classList.remove('available');
-                        roomElement.classList.add('pending');
-
+                    if (confirm(`강의실 ${roomNumber}호 (${date}) 대여가 맞습니까?`)) {
+                        // 예약 저장 요청
                         fetch('/submit_reservation', {
                             method: 'POST',
                             headers: {
@@ -313,57 +376,93 @@
                                 'room_number': roomNumber,
                                 'user_id': userId, // 로그인 아이디를 사용
                                 'status': '대여 대기',
+                                'date': date, // 날짜 추가
                             }),
                         })
                         .then(response => response.json())
                         .then(reservationData => {
                             if (reservationData.success) {
+                                alert("대여 대기 상태로 변경되었습니다.");
                                 closeApplicationModal();
+                                fetchReservations(); // 예약 상태 갱신
                             } else {
-                                alert("예약 저장에 실패했습니다. 다시 시도해주세요.");
+                                alert(reservationData.message || "예약 저장에 실패했습니다. 다시 시도해주세요.");
                             }
+                        })
+                        .catch(error => {
+                            console.error('Error submitting reservation:', error);
+                            alert("예약 요청 중 오류가 발생했습니다. 다시 시도해주세요.");
                         });
                     }
                 } else {
                     alert("회원정보와 일치하지 않습니다. 다시 시도해주세요.");
                 }
+            })
+            .catch(error => {
+                console.error('Error verifying user info:', error);
+                alert("사용자 정보 확인 중 오류가 발생했습니다. 다시 시도해주세요.");
             });
         }
 
-        setInterval(fetchReservations, 100);
-
-        function fetchReservations() {
-            fetch('/get_reservations')
-            .then(response => response.json())
-            .then(data => {
-                const allRoomElements = document.querySelectorAll('.room');
-                allRoomElements.forEach(roomElement => {
-                    roomElement.classList.remove('available', 'pending', 'unavailable');
-                    roomElement.classList.add('available');
-                });
-
-                data.forEach(reservation => {
-                    const roomElement = document.querySelector(`[data-room-number='${reservation.room_number}']`);
-                    if (roomElement) {
-                        roomElement.classList.remove('available', 'pending', 'unavailable');
-                        if (reservation.status === "대여 대기") {
-                            roomElement.classList.add('pending');
-                        } else if (reservation.status === "대여 완료") {
-                            roomElement.classList.add('unavailable');
-                        }
-                    }
-                });
-            })
-            .catch(error => console.error('Error fetching reservations:', error));
+        // 모달 바깥 영역 클릭 시 닫기
+        window.onclick = function(event) {
+            var applicationModal = document.getElementById('application-modal');
+            var floorPlanModal = document.getElementById('floor-plan-modal');
+            var dateModal = document.getElementById('date-modal');
+            if (event.target == applicationModal) {
+                closeApplicationModal();
+            }
+            if (event.target == floorPlanModal) {
+                closeFloorPlanModal();
+            }
+            if (event.target == dateModal) {
+                closeDateModal();
+            }
         }
+        
+        // Esc 키로 모달 닫기
+        document.addEventListener('keydown', function(event) {
+            if (event.key === "Escape") {
+                closeApplicationModal();
+                closeFloorPlanModal();
+                closeDateModal();
+            }
+        });
+        
+        // 예약 정보 가져오기 함수
+        function fetchReservations() {
+            fetch(`/get_reservations?date=${selectedDate}`)
+                .then(response => response.json())
+                .then(data => {
+                    const allRoomElements = document.querySelectorAll('.room');
+                    allRoomElements.forEach(roomElement => {
+                        roomElement.classList.remove('available', 'pending', 'unavailable');
+                        roomElement.classList.add('available');
+                    });
 
+                    data.forEach(reservation => {
+                        const roomElement = document.querySelector(`[data-room-number='${reservation.room_number}']`);
+                        if (roomElement) {
+                            roomElement.classList.remove('available', 'pending', 'unavailable');
+                            if (reservation.status === "대여 대기") {
+                                roomElement.classList.add('pending');
+                            } else if (reservation.status === "대여 완료") {
+                                roomElement.classList.add('unavailable');
+                            }
+                        }
+                    });
+                })
+                .catch(error => console.error('Error fetching reservations:', error));
+        }
     </script>
+</head>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <div class="title">남서울대학교 강의실 대여 시스템</div>
             <div class="admin-info">
+                <button id="date-select-button" onclick="openDateModal()">날짜 선택</button> |
                 <a href="{{ url_for('user_info') }}" style="color: white; text-decoration: none;">회원정보</a> | <span class="logout-link" onclick="logout()">로그아웃</span>
             </div>
         </div>
@@ -431,21 +530,35 @@
         </div>
     </div>
 
-    
+    <!-- 날짜 선택 모달 -->
+    <div id="date-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeDateModal()">&times;</span>
+            <div class="modal-header">날짜 선택</div>
+            <input type="date" id="selected-date" value="" />
+            <div class="modal-footer">
+                <button onclick="selectDate()">확인</button>
+            </div>
+        </div>
+    </div>
+        
     <!-- 강의실 신청 모달 -->
     <div id="application-modal" class="modal application-modal">
-        <div class="modal-content application-modal-content">
+        <div class="modal-content">
             <span class="close" onclick="closeApplicationModal()">&times;</span>
             <div class="modal-header">강의실 신청</div>
             <input type="hidden" id="room-number">
             <input type="text" id="name" placeholder="이름" required><br><br>
             <input type="text" id="studentId" placeholder="학번 (8자리)" minlength="8" maxlength="8" required><br><br>
             <input type="text" id="phone" placeholder="전화번호" pattern="\d{10,11}" maxlength="11" required><br><br>
+            <!-- 날짜 입력 필드 추가 -->
+            <input type="date" id="reservation-date" required><br><br>
             <div class="modal-footer">
                 <button onclick="submitApplication()">신청</button>
             </div>
         </div>
     </div>
+
 
     <!-- 도면 보기 모달 -->
     <div id="floor-plan-modal" class="modal floor-plan-modal">

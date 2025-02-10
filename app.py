@@ -1,9 +1,22 @@
 import sqlite3
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session, send_file
 from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime, timedelta
+from pytz import timezone
+from flask_apscheduler import APScheduler
 
 app = Flask(__name__)
+
+# APScheduler 설정 클래스
+class Config:
+    SCHEDULER_API_ENABLED = True
+    SCHEDULER_TIMEZONE = 'Asia/Seoul'  # 대한민국 시간대 설정
+
+app.config.from_object(Config())  # 설정 적용
 app.secret_key = 'your_secret_key'
+scheduler = APScheduler()
+scheduler.init_app(app)
+scheduler.start()
 
 DATABASE = 'classroom_rentals.db'
 
@@ -18,7 +31,8 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             room_number TEXT,
             user_id TEXT,
-            status TEXT
+            status TEXT,
+            date TEXT
         )
     ''')
 
@@ -44,6 +58,41 @@ def init_db():
     conn.commit()
     conn.close()
 
+
+# date 날짜 시스템 필드 추가
+def add_date_column():
+    conn = sqlite3.connect(DATABASE)
+    c = conn.cursor()
+    try:
+        c.execute("ALTER TABLE reservations ADD COLUMN date TEXT")
+    except sqlite3.OperationalError:
+        # 컬럼이 이미 존재하면 예외 발생하므로 무시
+        pass
+    conn.commit()
+    conn.close()
+
+# 예약 초기화 함수
+def reset_reservations():
+    with app.app_context():
+        # 현재 한국 날짜를 가져옵니다.
+        korea_timezone = timezone('Asia/Seoul')
+        today = datetime.now(korea_timezone).date()
+        tomorrow = today + timedelta(days=1)
+        tomorrow_str = tomorrow.strftime('%Y-%m-%d')
+
+        # 현재 날짜보다 이전의 예약 삭제
+        conn = sqlite3.connect(DATABASE)
+        c = conn.cursor()
+        c.execute("DELETE FROM reservations WHERE date < ?", (today.strftime('%Y-%m-%d'),))
+        conn.commit()
+        conn.close()
+        print(f"Reservations reset at {today.strftime('%Y-%m-%d')}")
+
+# 스케줄러에 작업 추가
+@scheduler.task('cron', id='reset_reservations', hour=0, minute=0)
+def scheduled_reset_reservations():
+    reset_reservations()
+
 # 관리자 계정 생성 함수
 def init_admin():
     conn = sqlite3.connect(DATABASE)
@@ -64,8 +113,6 @@ def init_admin():
                   (admin_id, generate_password_hash(admin_password)))
     conn.commit()
     conn.close()
-
-
 
 # 아이디 중복 확인 함수
 def is_user_exists(user_id):
@@ -134,12 +181,13 @@ def verify_login(user_id, password):
     conn.close()
     return is_user, is_admin
 
-# 강의실 예약 저장 함수
-def save_reservation(room_number, user_id, status):
+
+# submit_reservation 라우트에서 user_id를 세션에서 가져오게끔
+def save_reservation(room_number, user_id, status, date):
     conn = sqlite3.connect(DATABASE)
     c = conn.cursor()
-    c.execute("INSERT INTO reservations (room_number, user_id, status) VALUES (?, ?, ?)",
-              (room_number, user_id, status))
+    c.execute("INSERT INTO reservations (room_number, user_id, status, date) VALUES (?, ?, ?, ?)",
+              (room_number, user_id, status, date))
     conn.commit()
     conn.close()
 
@@ -165,6 +213,7 @@ def login():
             return redirect(url_for('user_main', user_id=user_id))
         elif is_admin:
             # 관리자 로그인 시 관리자 페이지로 리다이렉트
+            session['user_id'] = user_id  # 관리자 세션 저장
             return redirect(url_for('admin_main'))
         else:
             # 로그인 실패 시 로그인 페이지로 돌아감
@@ -221,6 +270,8 @@ def register():
         conn.commit()
         conn.close()
 
+        session['user_id'] = user_id
+
         return render_template('success.html', name=name)
 
     return render_template('register.html')
@@ -245,28 +296,46 @@ def verify_user_info_route():
     is_valid = verify_user_info(name, student_id, phone, user_id)
     return jsonify({'is_valid': is_valid})
 
-# submit_reservation 라우트에서 user_id를 세션에서 가져오게끔
+# 중복 예약 확인은 submit_reservation 함수에서 처리
 @app.route('/submit_reservation', methods=['POST'])
 def submit_reservation():
     room_number = request.form['room_number']
     user_id = session.get('user_id')
+    date = request.form['date']
     if not user_id:
         return jsonify({'success': False, 'message': '로그인이 필요합니다.'})
     status = "대여 대기"
-    save_reservation(room_number, user_id, status)
+
+    # 중복 예약 확인
+    conn = sqlite3.connect(DATABASE)
+    c = conn.cursor()
+    c.execute("SELECT 1 FROM reservations WHERE room_number = ? AND date = ?", (room_number, date))
+    if c.fetchone():
+        conn.close()
+        return jsonify({'success': False, 'message': '이미 해당 날짜에 해당 강의실이 예약되었습니다.'})
+
+    # 예약 저장
+    conn.close()  # 이전 연결 닫기
+    save_reservation(room_number, user_id, status, date)
     return jsonify({'success': True})
+
 
 @app.route('/get_reservations', methods=['GET'])
 def get_reservations():
+    date = request.args.get('date')  # 날짜 파라미터 받기
     conn = sqlite3.connect(DATABASE)
     c = conn.cursor()
-    c.execute("SELECT room_number, user_id, status FROM reservations")
+    if date:
+        c.execute("SELECT room_number, user_id, status FROM reservations WHERE date = ?", (date,))
+    else:
+        c.execute("SELECT room_number, user_id, status FROM reservations")
     reservations = c.fetchall()
     conn.close()
 
     # 예약 데이터를 JSON 형태로 반환
     reservations_list = [{'room_number': r[0], 'user_id': r[1], 'status': r[2]} for r in reservations]
     return jsonify(reservations_list)
+
 
 # 일반 사용자 메인 페이지
 @app.route('/user_main')
@@ -279,15 +348,19 @@ def user_main():
 # 관리자 메인 페이지
 @app.route('/admin_main')
 def admin_main():
-    return render_template('UI_Admin_Site.html')
+    if 'user_id' not in session:
+        return redirect(url_for('home'))
+    user_id = session['user_id']
+    return render_template('UI_Admin_Site.html', user_id=user_id)
 
 # 예약 정보 가져오기
 @app.route('/get_reservation_info')
 def get_reservation_info():
     room_number = request.args.get('room_number')
+    date = request.args.get('date')  # 날짜 파라미터 추가
     conn = sqlite3.connect(DATABASE)
     c = conn.cursor()
-    c.execute("SELECT user_id FROM reservations WHERE room_number = ? AND (status = '대여 대기' OR status = '대여 완료')", (room_number,))
+    c.execute("SELECT user_id FROM reservations WHERE room_number = ? AND date = ? AND (status = '대여 대기' OR status = '대여 완료')", (room_number, date))
     result = c.fetchone()
 
     if result:
@@ -309,9 +382,10 @@ def get_reservation_info():
 def update_reservation_status():
     room_number = request.form['room_number']
     status = request.form['status']
+    date = request.form['date']  # 날짜 추가
     conn = sqlite3.connect(DATABASE)
     c = conn.cursor()
-    c.execute("UPDATE reservations SET status = ? WHERE room_number = ? AND status = '대여 대기'", (status, room_number))
+    c.execute("UPDATE reservations SET status = ? WHERE room_number = ? AND date = ? AND status = '대여 대기'", (status, room_number, date))
     conn.commit()
     conn.close()
     return jsonify({'success': True})
@@ -320,9 +394,10 @@ def update_reservation_status():
 @app.route('/delete_reservation', methods=['POST'])
 def delete_reservation():
     room_number = request.form['room_number']
+    date = request.form['date']  # 날짜 추가
     conn = sqlite3.connect(DATABASE)
     c = conn.cursor()
-    c.execute("DELETE FROM reservations WHERE room_number = ? AND status = '대여 대기'", (room_number,))
+    c.execute("DELETE FROM reservations WHERE room_number = ? AND date = ? AND status = '대여 대기'", (room_number, date))
     conn.commit()
     conn.close()
     return jsonify({'success': True})
@@ -332,17 +407,17 @@ def delete_reservation():
 def cancel_rental():
     try:
         room_number = request.form['room_number']
+        date = request.form['date']  # 날짜 추가
         conn = sqlite3.connect(DATABASE)
         c = conn.cursor()
         # '대여 완료' 상태의 예약 삭제
-        c.execute("DELETE FROM reservations WHERE room_number = ? AND status = '대여 완료'", (room_number,))
+        c.execute("DELETE FROM reservations WHERE room_number = ? AND date = ? AND status = '대여 완료'", (room_number, date))
         conn.commit()
         conn.close()
         return jsonify({'success': True})
     except Exception as e:
         print(f"Error in /cancel_rental: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
-
 
 @app.route('/user_info')
 def user_info():
@@ -364,9 +439,8 @@ def download_application_form():
     # 파일 전송
     return send_file(file_path, as_attachment=True)
 
-
-
 if __name__ == '__main__':
     init_db()   # 데이터베이스 초기화
+    add_date_column() # date 컬럼 추가
     init_admin() # 관리자 계정 생성
     app.run(host='127.0.0.1', port=5000, debug=True)
